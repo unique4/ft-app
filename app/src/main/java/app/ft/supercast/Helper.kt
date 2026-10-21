@@ -1,6 +1,7 @@
 package app.ft.supercast
 
 import android.content.Context
+import app.ft.FTApp
 import app.ft.core.DiagLog
 import app.ft.core.Root
 import app.ft.supercast.adb.AdbClient
@@ -87,8 +88,38 @@ object Helper {
         }
     }
 
+    /**
+     * Starts the helper through Shizuku rather than a raw adb connection. Unlike
+     * [startWithAdb], this survives a debugging on/off cycle, because the trust it
+     * relies on lives in Shizuku's own pairing (Android's real wireless-debugging
+     * keystore), not in a fixed local port that adbd resets on every toggle.
+     */
+    fun startWithShizuku(context: Context, token: String, connected: () -> Boolean = { true }): Boolean {
+        if (ShizukuBridge.state(context) != ShizukuBridge.State.READY) {
+            DiagLog.w(TAG, "Shizuku is not ready to start the helper with")
+            return false
+        }
+        val apk = apkPath(context) ?: return false
+        ShizukuBridge.exec("pkill -f $MAIN")
+        val started = ShizukuBridge.exec("nohup ${viaEnv(apk, token)} >$LOG 2>&1 &")
+        if (!started) {
+            DiagLog.w(TAG, "Shizuku would not run the helper command")
+            return false
+        }
+        if (waitFor(connected)) {
+            DiagLog.i(TAG, "helper started through Shizuku, running as ${who()}")
+            return true
+        }
+        val why = lastLog()
+        DiagLog.w(TAG, if (why.isEmpty()) "the helper would not start through Shizuku" else "the helper would not start through Shizuku: $why")
+        return false
+    }
+
     fun stop() {
         Root.run("pkill -f $MAIN")
+        if (ShizukuBridge.state(FTApp.instance) == ShizukuBridge.State.READY) {
+            ShizukuBridge.exec("pkill -f $MAIN")
+        }
     }
 
     fun lastLog(): String = Root.run("tail -20 $LOG")?.stdout?.trim().orEmpty()

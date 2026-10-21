@@ -358,6 +358,13 @@
     <string name="supercast_way_wireless_body">If debugging is already switched on and you have allowed FT on it once, FT sets itself up with no computer. Android will not let FT ask for that permission on its own, so the first time still needs the computer step below.</string>
     <string name="supercast_way_computer">From a computer, once</string>
     <string name="supercast_way_computer_body">Plug the phone into a computer with USB debugging on and run the one line below. It needs no files and sets everything up. Run it again after a phone restart.</string>
+    <string name="supercast_way_shizuku">With Shizuku</string>
+    <string name="supercast_way_shizuku_body">If Shizuku is installed and running, FT sets this up through it, surviving a debugging on/off switch and phone restarts in a way the other no-root ways cannot. Shizuku keeps its own pairing with Android\'s debug bridge, separate from FT\'s.</string>
+    <string name="supercast_way_shizuku_ready">Shizuku is ready. FT will use it automatically.</string>
+    <string name="supercast_way_shizuku_unauthorized">Shizuku is running but has not allowed FT yet.</string>
+    <string name="supercast_way_shizuku_not_running">Shizuku is installed but its service is not running. Open Shizuku and start it.</string>
+    <string name="supercast_way_shizuku_not_installed">Shizuku is not installed. Get it from shizuku.rikka.app, pair it once with wireless debugging, then come back here.</string>
+    <string name="supercast_way_shizuku_authorize">Allow FT in Shizuku</string>
     <string name="supercast_copy_command">Copy the command</string>
     <string name="supercast_stop">Stop</string>
     <string name="tile_looking">Looking for the car</string>

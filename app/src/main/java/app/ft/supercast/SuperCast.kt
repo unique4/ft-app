@@ -179,6 +179,14 @@ object SuperCast {
             }
             DiagLog.w(TAG, "root is there but the helper did not come back to FT")
         }
+        if (ShizukuBridge.state(context) == ShizukuBridge.State.READY) {
+            if (Helper.startWithShizuku(context, fresh) { _ready.value }) {
+                FTApp.instance.prefs.supercastWay = WAY_SHIZUKU
+                DiagLog.i(TAG, "apps on the car are ready, set up through Shizuku")
+                return true
+            }
+            DiagLog.w(TAG, "Shizuku is there but the helper did not come back to FT")
+        }
         return when (Helper.startWithAdb(context, fresh)) {
             Helper.Adb.STARTED -> {
                 val up = waitForHandshake()
@@ -220,4 +228,5 @@ object SuperCast {
     const val WAY_NONE = 0
     const val WAY_ROOT = 1
     const val WAY_BRIDGE = 2
+    const val WAY_SHIZUKU = 3
 }

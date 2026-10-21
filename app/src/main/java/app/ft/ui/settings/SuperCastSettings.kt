@@ -43,6 +43,7 @@ import androidx.compose.ui.unit.dp
 import app.ft.FTApp
 import app.ft.R
 import app.ft.supercast.Helper
+import app.ft.supercast.ShizukuBridge
 import app.ft.supercast.SuperCast
 import app.ft.ui.components.AppChecklist
 import app.ft.ui.components.Option
@@ -141,6 +142,28 @@ fun SuperCastSettings() {
         index = 2,
         open = open,
         onOpen = { open = if (open == 2) -1 else 2 },
+        title = stringResource(R.string.supercast_way_shizuku),
+        body = stringResource(R.string.supercast_way_shizuku_body)
+    ) {
+        val shizukuState = remember(open) { ShizukuBridge.state(context) }
+        Text(
+            when (shizukuState) {
+                ShizukuBridge.State.READY -> stringResource(R.string.supercast_way_shizuku_ready)
+                ShizukuBridge.State.UNAUTHORIZED -> stringResource(R.string.supercast_way_shizuku_unauthorized)
+                ShizukuBridge.State.NOT_RUNNING -> stringResource(R.string.supercast_way_shizuku_not_running)
+                ShizukuBridge.State.NOT_INSTALLED -> stringResource(R.string.supercast_way_shizuku_not_installed)
+            },
+            style = MaterialTheme.typography.bodyMedium,
+            color = MaterialTheme.colorScheme.onSurfaceVariant
+        )
+        if (shizukuState == ShizukuBridge.State.UNAUTHORIZED) {
+            TextButton(onClick = { ShizukuBridge.requestPermission() }) { Text(stringResource(R.string.supercast_way_shizuku_authorize)) }
+        }
+    }
+    Way(
+        index = 3,
+        open = open,
+        onOpen = { open = if (open == 3) -1 else 3 },
         title = stringResource(R.string.supercast_way_computer),
         body = stringResource(R.string.supercast_way_computer_body)
     ) {
