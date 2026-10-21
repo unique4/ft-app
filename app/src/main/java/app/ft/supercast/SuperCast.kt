@@ -108,6 +108,25 @@ object SuperCast {
         runCatching { queue.execute { runCatching(block).onFailure { DiagLog.w(TAG, "helper call failed: ${it.message}") } } }
     }
 
+    /**
+     * Wakes Shizuku (if it's the Shizuku-Next fork, which answers this broadcast with no
+     * app open and no manual tap) and sets the helper up, from one place FT itself
+     * controls — no Tasker, no touching the phone. Meant to be called from the car
+     * screen's dock, e.g. the first tap on a tile after a cold start / debug cycle.
+     */
+    fun quickSetup(context: android.content.Context) {
+        later {
+            try {
+                context.sendBroadcast(android.content.Intent("moe.shizuku.privileged.api.START"))
+                DiagLog.i(TAG, "asked Shizuku to start")
+            } catch (t: Throwable) {
+                DiagLog.w(TAG, "could not ask Shizuku to start: ${t.message}")
+            }
+            Thread.sleep(800)
+            start(context.applicationContext)
+        }
+    }
+
     private val touchThread = java.util.concurrent.Executors.newSingleThreadExecutor { task ->
         Thread(task, "ft-supercast-touch").apply { isDaemon = true }
     }

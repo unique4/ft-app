@@ -666,6 +666,12 @@ private fun TileGrid(keys: List<String>, modifier: Modifier, columns: Int = 0, i
 
 private fun openTile(key: String, onOpen: (CarView, Boolean) -> Unit, onApp: (String) -> Boolean = { false }) {
     val prefs = FTApp.instance.prefs
+    if (prefs.supercastOn && !SuperCast.ready.value) {
+        // Cold start / after a debugging on-off cycle: the helper isn't up yet. Kick off
+        // setup right from this tap instead of silently falling back to the accessibility
+        // mirror path below — tapping again once it comes up opens the app normally.
+        SuperCast.quickSetup(FTApp.instance)
+    }
     if (prefs.supercastOn && SuperCast.ready.value) {
         val packageName = when {
             key == "maps" -> prefs.mapsPackage
