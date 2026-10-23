@@ -11,6 +11,11 @@ import java.lang.reflect.Method;
 
 public final class Input {
     private static final int ASYNC = 0;
+    // adb's own "input keyevent" waits for the receiving window to finish handling the
+    // event before returning - special keys like KEYCODE_VOICE_ASSIST that PhoneWindowManager
+    // intercepts at a low level seem to need that, unlike ordinary keys which go through fine
+    // fire-and-forget.
+    public static final int WAIT_FOR_FINISH = 2;
 
     private static Object manager;
     private static Method inject;
@@ -78,22 +83,30 @@ public final class Input {
     }
 
     public static boolean key(int displayId, int action, int keyCode) {
+        return key(displayId, action, keyCode, ASYNC);
+    }
+
+    public static boolean key(int displayId, int action, int keyCode, int mode) {
         if (!ready()) {
             return false;
         }
         long now = SystemClock.uptimeMillis();
         KeyEvent event = new KeyEvent(now, now, action, keyCode, 0, 0,
             KeyCharacterMap.VIRTUAL_KEYBOARD, 0, 0, android.view.InputDevice.SOURCE_KEYBOARD);
-        return send(event, displayId);
+        return send(event, displayId, mode);
     }
 
     private static boolean send(InputEvent event, int displayId) {
+        return send(event, displayId, ASYNC);
+    }
+
+    private static boolean send(InputEvent event, int displayId, int mode) {
         try {
             if (setDisplay != null && displayId >= 0) {
                 setDisplay.invoke(event, displayId);
             }
             Touches.injected(event.getEventTime());
-            Object result = inject.invoke(manager, event, ASYNC);
+            Object result = inject.invoke(manager, event, mode);
             return !(result instanceof Boolean) || (Boolean) result;
         } catch (Throwable t) {
             Log.w("could not inject: " + t);

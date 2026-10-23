@@ -54,6 +54,7 @@ import androidx.compose.material.icons.filled.KeyboardArrowLeft
 import androidx.compose.material.icons.filled.Notifications
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
+import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Icon
 import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.LoadingIndicator
@@ -452,10 +453,15 @@ private fun CornerPill(corner: Int, onClick: () -> Unit) {
 private fun Launcher(state: CarState, style: CarStyle, preview: Boolean = false, onApp: (String) -> Boolean = { false }, onOpen: (CarView, Boolean) -> Unit = { _, _ -> }) {
     val player by CarPlayer.state.collectAsState()
     val context = LocalContext.current
-    val hasInfo = style.showClock || style.showLink || style.showCarHome || style.showMusic || style.showAa || style.widgets.isNotEmpty()
+    val hasInfo = style.showClock || style.showLink || style.showCarHome || style.showMusic || style.showAa || style.showSuperCast || style.widgets.isNotEmpty()
     val info: @Composable ColumnScope.() -> Unit = {
         if (style.showClock) Clock(style.clock24)
-        if (style.showLink) LinkChip(state, preview)
+        if (style.showLink || style.showSuperCast) {
+            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                if (style.showLink) LinkChip(state, preview)
+                if (style.showSuperCast) SuperCastStatus(preview)
+            }
+        }
         if (style.showCarHome) CarHomeButton { if (!preview) CarLifeService.goToCarHome() }
         CarWidgets(style, preview = preview)
         Spacer(Modifier.weight(1f))
@@ -664,14 +670,55 @@ private fun TileGrid(keys: List<String>, modifier: Modifier, columns: Int = 0, i
     }
 }
 
+/**
+ * Explicit on/off control for apps-on-the-car, alongside FT's other home-screen pills
+ * (the connection pill, car-home button): a spinner while [SuperCast.quickSetup] is
+ * working, a small tappable pill otherwise - tap to set up when not ready, tap to stop
+ * when it is. This is also the only feedback a tap gets while setup is in flight, since
+ * that can take a few seconds and a tap that visibly does nothing reads as broken.
+ */
+@Composable
+private fun SuperCastStatus(preview: Boolean = false) {
+    if (!FTApp.instance.prefs.supercastOn) return
+    val context = LocalContext.current
+    val ready by SuperCast.ready.collectAsState()
+    val settingUp by SuperCast.settingUp.collectAsState()
+    Surface(
+        onClick = {
+            if (preview || settingUp) return@Surface
+            if (ready) SuperCast.quickStop(context) else SuperCast.quickSetup(context)
+        },
+        shape = RoundedCornerShape(50),
+        color = Color.White.copy(alpha = 0.12f),
+        contentColor = Color.White
+    ) {
+        Row(
+            Modifier.padding(horizontal = 14.dp, vertical = 6.dp),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(8.dp)
+        ) {
+            if (settingUp) {
+                CircularProgressIndicator(Modifier.size(14.dp), strokeWidth = 2.dp)
+            } else {
+                Box(
+                    Modifier.size(10.dp).clip(CircleShape)
+                        .background(if (ready) MaterialTheme.colorScheme.primary else Color.White.copy(alpha = 0.5f))
+                )
+            }
+            InkText(
+                when {
+                    settingUp -> stringResource(R.string.supercast_car_setting_up)
+                    ready -> stringResource(R.string.supercast_car_ready)
+                    else -> stringResource(R.string.supercast_car_tap_to_set_up)
+                },
+                MaterialTheme.typography.labelLarge
+            )
+        }
+    }
+}
+
 private fun openTile(key: String, onOpen: (CarView, Boolean) -> Unit, onApp: (String) -> Boolean = { false }) {
     val prefs = FTApp.instance.prefs
-    if (prefs.supercastOn && !SuperCast.ready.value) {
-        // Cold start / after a debugging on-off cycle: the helper isn't up yet. Kick off
-        // setup right from this tap instead of silently falling back to the accessibility
-        // mirror path below — tapping again once it comes up opens the app normally.
-        SuperCast.quickSetup(FTApp.instance)
-    }
     if (prefs.supercastOn && SuperCast.ready.value) {
         val packageName = when {
             key == "maps" -> prefs.mapsPackage

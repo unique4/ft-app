@@ -25,6 +25,7 @@ import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
@@ -51,6 +52,7 @@ import app.ft.ui.components.OptionRow
 import app.ft.ui.components.PickSetting
 import app.ft.ui.components.rememberRootGranted
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 
@@ -145,20 +147,62 @@ fun SuperCastSettings() {
         title = stringResource(R.string.supercast_way_shizuku),
         body = stringResource(R.string.supercast_way_shizuku_body)
     ) {
-        val shizukuState = remember(open) { ShizukuBridge.state(context) }
-        Text(
-            when (shizukuState) {
-                ShizukuBridge.State.READY -> stringResource(R.string.supercast_way_shizuku_ready)
-                ShizukuBridge.State.UNAUTHORIZED -> stringResource(R.string.supercast_way_shizuku_unauthorized)
-                ShizukuBridge.State.NOT_RUNNING -> stringResource(R.string.supercast_way_shizuku_not_running)
-                ShizukuBridge.State.NOT_INSTALLED -> stringResource(R.string.supercast_way_shizuku_not_installed)
-            },
-            style = MaterialTheme.typography.bodyMedium,
-            color = MaterialTheme.colorScheme.onSurfaceVariant
-        )
+        var shizukuState by remember { mutableStateOf(ShizukuBridge.state(context)) }
+        // Same pattern as the "Set it up now" button above: the button itself disappears
+        // while the action is in flight and a spinner takes its place, so a tap always
+        // gets visible feedback instead of looking like it did nothing for the second or
+        // two Shizuku actually takes to come up after the broadcast.
+        var startingShizuku by remember { mutableStateOf(false) }
+        var stoppingShizuku by remember { mutableStateOf(false) }
+        LaunchedEffect(open) {
+            // The card's own state snapshot goes stale the moment you tap Start/Stop/Allow
+            // inside it - poll while it's open so the buttons below update themselves
+            // instead of needing the card closed and reopened to see what changed.
+            while (open == 2) {
+                shizukuState = ShizukuBridge.state(context)
+                if (shizukuState != ShizukuBridge.State.NOT_RUNNING) startingShizuku = false
+                if (shizukuState != ShizukuBridge.State.READY && shizukuState != ShizukuBridge.State.UNAUTHORIZED) stoppingShizuku = false
+                delay(1000)
+            }
+        }
+        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            if (startingShizuku || stoppingShizuku) {
+                CircularProgressIndicator(Modifier.size(14.dp), strokeWidth = 2.dp)
+            } else {
+                Box(
+                    Modifier.size(10.dp).clip(CircleShape).background(
+                        if (shizukuState == ShizukuBridge.State.READY) MaterialTheme.colorScheme.primary
+                        else MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                )
+            }
+            Text(
+                when {
+                    startingShizuku -> stringResource(R.string.supercast_way_shizuku_starting)
+                    stoppingShizuku -> stringResource(R.string.supercast_way_shizuku_stopping)
+                    shizukuState == ShizukuBridge.State.READY -> stringResource(R.string.supercast_way_shizuku_ready)
+                    shizukuState == ShizukuBridge.State.UNAUTHORIZED -> stringResource(R.string.supercast_way_shizuku_unauthorized)
+                    shizukuState == ShizukuBridge.State.NOT_RUNNING -> stringResource(R.string.supercast_way_shizuku_not_running)
+                    else -> stringResource(R.string.supercast_way_shizuku_not_installed)
+                },
+                style = MaterialTheme.typography.bodyMedium,
+                color = MaterialTheme.colorScheme.onSurfaceVariant
+            )
+        }
+        if (!startingShizuku && shizukuState == ShizukuBridge.State.NOT_RUNNING) {
+            TextButton(onClick = { startingShizuku = true; ShizukuBridge.start(context) }) { Text(stringResource(R.string.supercast_way_shizuku_start)) }
+        }
         if (shizukuState == ShizukuBridge.State.UNAUTHORIZED) {
             TextButton(onClick = { ShizukuBridge.requestPermission() }) { Text(stringResource(R.string.supercast_way_shizuku_authorize)) }
         }
+        if (!stoppingShizuku && (shizukuState == ShizukuBridge.State.READY || shizukuState == ShizukuBridge.State.UNAUTHORIZED)) {
+            // For after a drive: apps on the car keep running without Shizuku, so this is
+            // just "I'm done, put Shizuku away" - no need to dig into Shizuku's own UI.
+            TextButton(onClick = { stoppingShizuku = true; SuperCast.quickStop(context) }) { Text(stringResource(R.string.supercast_way_shizuku_stop)) }
+        }
+        Spacer(Modifier.height(6.dp))
+        BoolSetting(stringResource(R.string.supercast_auto_start), prefs.supercastAutoStart, stringResource(R.string.supercast_auto_start_about)) { prefs.supercastAutoStart = it }
+        BoolSetting(stringResource(R.string.supercast_auto_stop), prefs.supercastAutoStop, stringResource(R.string.supercast_auto_stop_about)) { prefs.supercastAutoStop = it }
     }
     Way(
         index = 3,

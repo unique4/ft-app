@@ -1131,6 +1131,10 @@ class CarLifeService : Service() {
             soundDeclined = false
             blockedSoundNoticed = false
             updateBeacon()
+            if (app.prefs.supercastOn && app.prefs.supercastAutoStop && SuperCast.ready.value) {
+                DiagLog.i(tag, "car disconnected, putting Shizuku away")
+                SuperCast.quickStop(applicationContext)
+            }
             if (l === usbLink) scope.launch(Dispatchers.Main) { if (l === usbLink) usbGone(reason) }
         }
         stateJob?.cancel()
@@ -1159,11 +1163,9 @@ class CarLifeService : Service() {
                 if (st is CarLifeSession.State.Projecting && !autoOpened) {
                     autoOpened = true
                     openOnConnect()
-                    if (app.prefs.supercastOn && !SuperCast.ready.value) {
-                        scope.launch(Dispatchers.IO) {
-                            DiagLog.i(tag, "starting the apps-on-the-car helper after connection")
-                            SuperCast.start(applicationContext)
-                        }
+                    if (app.prefs.supercastOn && app.prefs.supercastAutoStart && !SuperCast.ready.value) {
+                        DiagLog.i(tag, "car connected, waking Shizuku and starting the apps-on-the-car helper")
+                        SuperCast.quickSetup(applicationContext)
                     }
                 }
             }
@@ -1605,6 +1607,15 @@ class CarLifeService : Service() {
         val wanted = app.prefs.openOnConnect.trim()
         if (wanted.isEmpty()) return
         if (app.prefs.aaAutoStart && wanted == "aa") return
+        val isApp = wanted == "maps" || wanted.startsWith("app:")
+        if (isApp && app.prefs.supercastOn && SuperCast.ready.value) {
+            // launch() casts the phone's screen (needs the share/MediaProjection prompt) -
+            // apps on the car already opens apps with no cast and no prompt, so casting
+            // the same app on top of that on every connect is both redundant and the one
+            // thing that still asks the user for anything.
+            DiagLog.i(tag, "not casting $wanted on connect - apps on the car already covers it")
+            return
+        }
         scope.launch {
             delay(1500)
             DiagLog.i(tag, "opening $wanted because the car connected")
@@ -1836,6 +1847,35 @@ class CarLifeService : Service() {
     }
 
     private fun handleHardKey(key: Int, mapped: Int) {
+        if (key == 0x21) {
+            // CarLife's own dedicated "open voice recognition" key (distinct from the
+            // wheel's next/prev double-tap, which reaches the same action a different way) -
+            // not a steering wheel remap, so this works regardless of what's on screen.
+            // ACTION_VOICE_COMMAND was tried first, but Google's app resolves that to a
+            // legacy trampoline (HandsFreeActivity) that finishes itself instantly without
+            // ever showing the voice UI, every single time. Sending the real
+            // KEYCODE_VOICE_ASSIST instead - through the apps-on-car helper's input
+            // injection in "wait for finish" mode, since fire-and-forget was not enough to
+            // trigger PhoneWindowManager's special-key handling for it - reliably opens
+            // Gemini's voice bubble, same as a real Android Auto head unit would.
+            val sent = SuperCast.globalKey(android.view.KeyEvent.KEYCODE_VOICE_ASSIST)
+            DiagLog.i(tag, "voice key $key (open): ${if (sent) "sent through the apps-on-car helper" else "helper not ready"}")
+            return
+        }
+        if (key == 0x22) {
+            // Pressing VOICE_ASSIST again does not close the bubble on this Google app
+            // build - it just reopens/recreates it. BACK does dismiss it, but is only safe
+            // to send when the bubble is actually what's focused - otherwise, if opening it
+            // silently failed, BACK would go to whatever else is on screen (Maps, FT's own
+            // UI) instead. So check first and skip entirely if it's not there.
+            if (!SuperCast.assistantIsOnTop()) {
+                DiagLog.i(tag, "voice key $key (discard): assistant isn't on top, not sending back")
+                return
+            }
+            val sent = SuperCast.globalKey(android.view.KeyEvent.KEYCODE_BACK)
+            DiagLog.i(tag, "voice key $key (discard): ${if (sent) "sent through the apps-on-car helper" else "helper not ready"}")
+            return
+        }
         val st = _state.value
         when {
             st.aaOverlay -> {

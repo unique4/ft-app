@@ -168,6 +168,30 @@ public final class Commands {
                 answer.putBoolean("ok", true);
                 return answer;
             }
+            case "globalkey": {
+                // Same as "key" but with no pane - displayId -1 skips setDisplayId
+                // entirely, so this goes wherever a real hardware key would: whatever
+                // currently has focus, car screen or not. For keys like
+                // KEYCODE_VOICE_ASSIST where the receiving app toggles its own state on
+                // repeat presses, there's no pane to target in the first place. Waits for
+                // the event to actually finish (like adb's own "input keyevent" does) -
+                // special keys PhoneWindowManager intercepts need that, fire-and-forget
+                // was not enough to trigger them.
+                int code = request.getInt("key", 0);
+                Input.key(-1, KeyEvent.ACTION_DOWN, code, Input.WAIT_FOR_FINISH);
+                Input.key(-1, KeyEvent.ACTION_UP, code, Input.WAIT_FOR_FINISH);
+                answer.putBoolean("ok", true);
+                return answer;
+            }
+            case "topfocus": {
+                // Whatever's actually resumed right now, car screen or not - used before
+                // sending a discard key so it only ever goes to the assistant bubble
+                // itself, never to whatever happened to be focused if opening it failed.
+                android.content.ComponentName top = Focus.topActivity();
+                answer.putString("package", top == null ? "" : top.getPackageName());
+                answer.putString("class", top == null ? "" : top.getClassName());
+                return answer;
+            }
             case "apps":
                 return Apps.list();
             case "screen": {

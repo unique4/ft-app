@@ -264,6 +264,7 @@ fun CarHomeSettings() {
     Toggle(stringResource(R.string.look_show_car_home), style.showCarHome) { on -> save { p.carShowCarHome = on } }
     Toggle(stringResource(R.string.look_show_music), style.showMusic) { on -> save { p.carShowMusic = on } }
     Toggle(stringResource(R.string.look_show_aa), style.showAa) { on -> save { p.carShowAa = on } }
+    if (p.supercastOn) Toggle(stringResource(R.string.look_show_supercast), style.showSuperCast) { on -> save { p.carShowSuperCast = on } }
 }
 
 @OptIn(ExperimentalLayoutApi::class)

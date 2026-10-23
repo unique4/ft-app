@@ -1,6 +1,7 @@
 package app.ft.supercast
 
 import android.content.Context
+import android.content.Intent
 import android.content.pm.PackageManager
 import app.ft.core.DiagLog
 import java.io.FileInputStream
@@ -41,6 +42,24 @@ object ShizukuBridge {
             } catch (_: Throwable) {
                 State.NOT_RUNNING
             }
+        }
+    }
+
+    /**
+     * Asks the Shizuku-Next fork to start with no UI interaction, via its documented
+     * `moe.shizuku.privileged.api.START` broadcast - see [app.ft.supercast.SuperCast.quickSetup]
+     * for why this needs FLAG_INCLUDE_STOPPED_PACKAGES. Fire-and-forget: callers should
+     * poll [state] afterwards rather than assume this succeeded immediately.
+     */
+    fun start(context: Context) {
+        try {
+            val intent = Intent("moe.shizuku.privileged.api.START")
+                .setPackage(PACKAGE_NAME)
+                .addFlags(Intent.FLAG_INCLUDE_STOPPED_PACKAGES)
+            context.sendBroadcast(intent)
+            DiagLog.i(TAG, "asked Shizuku to start")
+        } catch (t: Throwable) {
+            DiagLog.w(TAG, "could not ask Shizuku to start: ${t.message}")
         }
     }
 

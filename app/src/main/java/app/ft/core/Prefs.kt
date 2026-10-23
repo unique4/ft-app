@@ -104,6 +104,7 @@ class Prefs(context: Context) {
     var carShowMusic: Boolean get() = bool("carShowMusic", true); set(v) = set("carShowMusic", v)
     var carShowAa: Boolean get() = bool("carShowAa", true); set(v) = set("carShowAa", v)
     var carShowCarHome: Boolean get() = bool("carShowCarHome", true); set(v) = set("carShowCarHome", v)
+    var carShowSuperCast: Boolean get() = bool("carShowSuperCast", true); set(v) = set("carShowSuperCast", v)
 
     var carWidgets: String get() = str("carWidgets", ""); set(v) = set("carWidgets", v)
     var weatherFahrenheit: Boolean get() = bool("weatherFahrenheit", false); set(v) = set("weatherFahrenheit", v)
@@ -138,4 +139,6 @@ class Prefs(context: Context) {
     var supercastWay: Int get() = int("supercastWay", 0); set(v) = set("supercastWay", v)
     var supercastDockHidden: Boolean get() = bool("supercastDockHidden", false); set(v) = set("supercastDockHidden", v)
     var supercastSplit: Float get() = flt("supercastSplit", 0.5f); set(v) = set("supercastSplit", v)
+    var supercastAutoStart: Boolean get() = bool("supercastAutoStart", false); set(v) = set("supercastAutoStart", v)
+    var supercastAutoStop: Boolean get() = bool("supercastAutoStop", false); set(v) = set("supercastAutoStop", v)
 }

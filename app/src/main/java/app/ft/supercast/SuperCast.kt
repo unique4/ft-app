@@ -25,6 +25,12 @@ object SuperCast {
     private val _ready = MutableStateFlow(false)
     val ready: StateFlow<Boolean> = _ready
 
+    /** True while [quickSetup] is actively trying (Shizuku wake, wait, start) - for a
+     * loading state on the car screen, so a tap that can't open anything yet still shows
+     * something happened instead of looking like it did nothing. */
+    private val _settingUp = MutableStateFlow(false)
+    val settingUp: StateFlow<Boolean> = _settingUp
+
     val client: IFtClient = object : IFtClient.Stub() {
         override fun onServer(bound: IFtServer?, sent: String?) {
             if (sent != token) {
@@ -115,15 +121,61 @@ object SuperCast {
      * screen's dock, e.g. the first tap on a tile after a cold start / debug cycle.
      */
     fun quickSetup(context: android.content.Context) {
+        // A tap while one is already running just joins it instead of queueing a second
+        // full attempt behind it - otherwise every extra tap while the car screen looks
+        // unresponsive makes the actual wait longer, which is the opposite of helpful.
+        if (!_settingUp.compareAndSet(false, true)) return
         later {
             try {
-                context.sendBroadcast(android.content.Intent("moe.shizuku.privileged.api.START"))
-                DiagLog.i(TAG, "asked Shizuku to start")
-            } catch (t: Throwable) {
-                DiagLog.w(TAG, "could not ask Shizuku to start: ${t.message}")
+                // The helper can already be alive and fine even though ready reads false
+                // (see start()'s own ping check) - but by the time start() would catch that,
+                // this function has already woken Shizuku and possibly waited 8s for it, for
+                // nothing. Checking here first means a tap when nothing actually needs doing
+                // never touches Shizuku at all.
+                if (ping()) {
+                    _ready.value = true
+                    DiagLog.i(TAG, "apps on the car were already running, no need to wake Shizuku")
+                    return@later
+                }
+                ShizukuBridge.start(context)
+                // Shizuku takes real time to come up after the broadcast - start its service,
+                // connect wireless debug, bind its permission-check binder - so poll instead of
+                // a single short sleep, and log every state so a silent skip is never a mystery.
+                var state = ShizukuBridge.state(context)
+                var waited = 0
+                while (state != ShizukuBridge.State.READY && waited < 8000) {
+                    DiagLog.i(TAG, "waiting for Shizuku: $state")
+                    Thread.sleep(500)
+                    waited += 500
+                    state = ShizukuBridge.state(context)
+                }
+                DiagLog.i(TAG, "Shizuku state after waiting: $state")
+                start(context.applicationContext)
+            } finally {
+                _settingUp.value = false
             }
-            Thread.sleep(800)
-            start(context.applicationContext)
+        }
+    }
+
+    /**
+     * Puts Shizuku away without touching the helper at all - no [stopAll] (which would
+     * close the open panes) and no [Helper.stop] (which would kill the process). The
+     * helper outlives whatever started it; Shizuku was only ever the way to get it
+     * running in the first place, and once it is up there is nothing left for Shizuku
+     * to do, so stopping it here is purely "don't leave it running for no reason" and
+     * apps on the car keep working exactly as before.
+     */
+    fun quickStop(context: android.content.Context) {
+        later {
+            try {
+                val intent = android.content.Intent("moe.shizuku.privileged.api.STOP")
+                    .setPackage(ShizukuBridge.PACKAGE_NAME)
+                    .addFlags(android.content.Intent.FLAG_INCLUDE_STOPPED_PACKAGES)
+                context.sendBroadcast(intent)
+                DiagLog.i(TAG, "asked Shizuku to stop")
+            } catch (t: Throwable) {
+                DiagLog.w(TAG, "could not ask Shizuku to stop: ${t.message}")
+            }
         }
     }
 
@@ -159,6 +211,22 @@ object SuperCast {
         ask("key") { putString("name", name); putInt("key", keyCode) }
     }
 
+    /** Injects a key with no pane and no display targeting - wherever a real hardware
+     * key of the same code would go, car screen or not. */
+    fun globalKey(keyCode: Int): Boolean =
+        ask("globalkey") { putInt("key", keyCode) }?.getBoolean("ok") == true
+
+    /** True only if Gemini's own voice-assistant bubble is what's actually resumed right
+     * now - checked before a discard key goes out, so it never lands on whatever else
+     * happens to be focused (Maps, FT's own screen) if opening the assistant silently
+     * failed. */
+    fun assistantIsOnTop(): Boolean {
+        val answer = ask("topfocus") ?: return false
+        val pkg = answer.getString("package") ?: return false
+        val cls = answer.getString("class") ?: ""
+        return pkg == "com.google.android.googlequicksearchbox" && (cls.contains("floaty", true) || cls.contains("robin", true))
+    }
+
     fun apps(): List<Pair<String, String>> {
         val answer = ask("apps") ?: return emptyList()
         val packages = answer.getStringArrayList("packages") ?: return emptyList()
@@ -189,6 +257,17 @@ object SuperCast {
 
     fun start(context: android.content.Context): Boolean {
         if (_ready.value) return true
+        // ready can read false without the helper actually being gone - FT's own process
+        // can be frozen/trimmed and come back with this flag's in-memory value lost while
+        // the detached helper (which answers to no app's lifecycle) kept running the whole
+        // time. startWithShizuku/startWithRoot both pkill the helper unconditionally before
+        // relaunching it, so skipping straight to those would kill a perfectly working
+        // session just to rebuild the same thing - a ping first avoids that for free.
+        if (ping()) {
+            _ready.value = true
+            DiagLog.i(TAG, "apps on the car were already running, reconnected without restarting anything")
+            return true
+        }
         val fresh = freshToken()
         if (Root.ensure()) {
             if (Helper.startWithRoot(context, fresh) { _ready.value }) {
