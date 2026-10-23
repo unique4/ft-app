@@ -683,9 +683,10 @@ private fun SuperCastStatus(preview: Boolean = false) {
     val context = LocalContext.current
     val ready by SuperCast.ready.collectAsState()
     val settingUp by SuperCast.settingUp.collectAsState()
+    val stopping by SuperCast.stopping.collectAsState()
     Surface(
         onClick = {
-            if (preview || settingUp) return@Surface
+            if (preview || settingUp || stopping) return@Surface
             if (ready) SuperCast.quickStop(context) else SuperCast.quickSetup(context)
         },
         shape = RoundedCornerShape(50),
@@ -697,7 +698,7 @@ private fun SuperCastStatus(preview: Boolean = false) {
             verticalAlignment = Alignment.CenterVertically,
             horizontalArrangement = Arrangement.spacedBy(8.dp)
         ) {
-            if (settingUp) {
+            if (settingUp || stopping) {
                 CircularProgressIndicator(Modifier.size(14.dp), strokeWidth = 2.dp)
             } else {
                 Box(
@@ -708,6 +709,7 @@ private fun SuperCastStatus(preview: Boolean = false) {
             InkText(
                 when {
                     settingUp -> stringResource(R.string.supercast_car_setting_up)
+                    stopping -> stringResource(R.string.supercast_car_stopping)
                     ready -> stringResource(R.string.supercast_car_ready)
                     else -> stringResource(R.string.supercast_car_tap_to_set_up)
                 },

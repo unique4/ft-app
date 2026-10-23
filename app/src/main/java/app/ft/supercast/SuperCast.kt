@@ -31,6 +31,13 @@ object SuperCast {
     private val _settingUp = MutableStateFlow(false)
     val settingUp: StateFlow<Boolean> = _settingUp
 
+    /** True for a moment after [quickStop] fires - there is no reliable signal for "Shizuku
+     * has now actually stopped" to wait on the way [quickSetup] polls for READY, and
+     * [ready] itself does not change (the helper outlives Shizuku on purpose), so without
+     * this a tap to stop looks identical to a tap that did nothing. */
+    private val _stopping = MutableStateFlow(false)
+    val stopping: StateFlow<Boolean> = _stopping
+
     val client: IFtClient = object : IFtClient.Stub() {
         override fun onServer(bound: IFtServer?, sent: String?) {
             if (sent != token) {
@@ -166,6 +173,7 @@ object SuperCast {
      * apps on the car keep working exactly as before.
      */
     fun quickStop(context: android.content.Context) {
+        if (!_stopping.compareAndSet(false, true)) return
         later {
             try {
                 val intent = android.content.Intent("moe.shizuku.privileged.api.STOP")
@@ -173,8 +181,13 @@ object SuperCast {
                     .addFlags(android.content.Intent.FLAG_INCLUDE_STOPPED_PACKAGES)
                 context.sendBroadcast(intent)
                 DiagLog.i(TAG, "asked Shizuku to stop")
+                // The broadcast itself returns instantly, well before Shizuku has actually
+                // torn down - this is just long enough for the tap to visibly register.
+                Thread.sleep(1200)
             } catch (t: Throwable) {
                 DiagLog.w(TAG, "could not ask Shizuku to stop: ${t.message}")
+            } finally {
+                _stopping.value = false
             }
         }
     }

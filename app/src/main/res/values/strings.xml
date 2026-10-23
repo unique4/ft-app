@@ -375,6 +375,7 @@
     <string name="supercast_auto_stop">Stop automatically when the car disconnects</string>
     <string name="supercast_auto_stop_about">Stops Shizuku once the car connection ends. Apps on the car are not affected until FT connects to a car again.</string>
     <string name="supercast_car_setting_up">Setting up</string>
+    <string name="supercast_car_stopping">Stopping</string>
     <string name="supercast_car_ready">AOC ready</string>
     <string name="supercast_car_tap_to_set_up">Set up AOC</string>
     <string name="supercast_copy_command">Copy the command</string>
